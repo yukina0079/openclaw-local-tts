@@ -5,18 +5,35 @@ from pathlib import Path
 from urllib import request, error
 from typing import Optional
 
-DOWNLOAD_BASE = Path(r"C:\baidunetdiskdownload")
-API_URL = "http://127.0.0.1:9880/tts"
-DEFAULT_TEXT = "こんにちは。テスト音声です。今日はいい感じに話せています。"
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+CONFIG_CANDIDATES = [
+    REPO_ROOT / "config.local.json",
+    REPO_ROOT / "config.json",
+    REPO_ROOT / "config.example.json",
+]
 
 
-def pick_ref(model_name: str, explicit_ref: Optional[str]) -> Path:
+def load_config():
+    for path in CONFIG_CANDIDATES:
+        if path.exists():
+            with path.open("r", encoding="utf-8") as f:
+                return json.load(f), path
+    raise FileNotFoundError("No config file found. Please create config.local.json or config.json from config.example.json")
+
+
+def resolve_path(base: Path, value: str) -> Path:
+    p = Path(value)
+    return p if p.is_absolute() else (base / p).resolve()
+
+
+def pick_ref(download_base: Path, model_name: str, explicit_ref: Optional[str]) -> Path:
     if explicit_ref:
         p = Path(explicit_ref)
         if not p.exists():
             raise FileNotFoundError(f"ref audio not found: {p}")
         return p
-    voice_dir = DOWNLOAD_BASE / model_name
+    voice_dir = download_base / model_name
     if not voice_dir.exists():
         raise FileNotFoundError(f"voice dir not found: {voice_dir}")
     wavs = sorted([p for p in voice_dir.iterdir() if p.is_file() and p.suffix.lower() in {'.wav', '.mp3', '.flac'}])
@@ -25,7 +42,7 @@ def pick_ref(model_name: str, explicit_ref: Optional[str]) -> Path:
     return wavs[0]
 
 
-def synthesize(text, text_lang, prompt_text, prompt_lang, ref_audio, out_path, speed):
+def synthesize(api_url, text, text_lang, prompt_text, prompt_lang, ref_audio, out_path, speed):
     payload = {
         "text": text,
         "text_lang": text_lang,
@@ -39,7 +56,7 @@ def synthesize(text, text_lang, prompt_text, prompt_lang, ref_audio, out_path, s
         "speed_factor": speed,
     }
     data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    req = request.Request(API_URL, data=data, headers={"Content-Type": "application/json"}, method="POST")
+    req = request.Request(api_url, data=data, headers={"Content-Type": "application/json"}, method="POST")
     try:
         with request.urlopen(req, timeout=300) as resp:
             audio = resp.read()
@@ -52,29 +69,33 @@ def synthesize(text, text_lang, prompt_text, prompt_lang, ref_audio, out_path, s
     out_path.write_bytes(audio)
 
 
-def main():
-    ap = argparse.ArgumentParser(description="GPT-SoVITS local TTS wrapper")
-    ap.add_argument("--model", default="mzk(v2pp)", help="voice/model folder name under C:\\baidunetdiskdownload")
-    ap.add_argument("--text", default=DEFAULT_TEXT, help="text to synthesize")
-    ap.add_argument("--text-lang", default="ja", help="target text language, e.g. ja/zh/en")
-    ap.add_argument("--prompt-text", default="こんにちは。これはテストです。", help="transcript for reference audio")
-    ap.add_argument("--prompt-lang", default="ja", help="reference prompt language")
-    ap.add_argument("--ref-audio", default=None, help="explicit reference audio path")
-    ap.add_argument("--out", default=str(Path.cwd() / "output" / "tts-output.wav"), help="output wav path")
-    ap.add_argument("--speed", type=float, default=1.0, help="speed factor")
-    args = ap.parse_args()
-
-    ref = pick_ref(args.model, args.ref_audio)
-    out = Path(args.out)
-    synthesize(args.text, args.text_lang, args.prompt_text, args.prompt_lang, ref, out, args.speed)
-    print(f"REF={ref}")
-    print(f"OUT={out}")
-    print(f"SIZE={out.stat().st_size}")
-
-
 if __name__ == "__main__":
     try:
-        main()
+        cfg, cfg_path = load_config()
+        api = cfg["api"]
+        paths = cfg["paths"]
+        defaults = cfg["defaults"]
+
+        ap = argparse.ArgumentParser(description="GPT-SoVITS local TTS wrapper")
+        ap.add_argument("--model", default=defaults.get("model", "mzk(v2pp)"))
+        ap.add_argument("--text", default=defaults.get("text", "こんにちは。テストです。"))
+        ap.add_argument("--text-lang", default=defaults.get("textLang", "ja"))
+        ap.add_argument("--prompt-text", default=defaults.get("promptText", "こんにちは。これはテストです。"))
+        ap.add_argument("--prompt-lang", default=defaults.get("promptLang", "ja"))
+        ap.add_argument("--ref-audio", default=None)
+        ap.add_argument("--out", default=str((REPO_ROOT / paths.get("outputDir", "output") / "tts-output.wav").resolve()))
+        ap.add_argument("--speed", type=float, default=float(defaults.get("speed", 1.0)))
+        args = ap.parse_args()
+
+        download_base = resolve_path(REPO_ROOT, paths["downloadBase"])
+        api_url = api["baseUrl"].rstrip("/") + api.get("ttsPath", "/tts")
+        ref = pick_ref(download_base, args.model, args.ref_audio)
+        out = Path(args.out)
+        synthesize(api_url, args.text, args.text_lang, args.prompt_text, args.prompt_lang, ref, out, args.speed)
+        print(f"CONFIG={cfg_path}")
+        print(f"REF={ref}")
+        print(f"OUT={out}")
+        print(f"SIZE={out.stat().st_size}")
     except Exception as e:
         print(f"ERROR={e}", file=sys.stderr)
         sys.exit(1)
