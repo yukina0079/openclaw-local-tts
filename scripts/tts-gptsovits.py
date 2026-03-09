@@ -27,6 +27,18 @@ def resolve_path(base: Path, value: str) -> Path:
     return p if p.is_absolute() else (base / p).resolve()
 
 
+def check_api_health(base_url: str) -> bool:
+    candidates = [base_url.rstrip("/"), base_url.rstrip("/") + "/docs"]
+    for url in candidates:
+        try:
+            with request.urlopen(url, timeout=3) as resp:
+                if 200 <= getattr(resp, "status", 200) < 500:
+                    return True
+        except Exception:
+            pass
+    return False
+
+
 def pick_ref(download_base: Path, model_name: str, explicit_ref: Optional[str]) -> Path:
     if explicit_ref:
         p = Path(explicit_ref)
@@ -85,10 +97,16 @@ if __name__ == "__main__":
         ap.add_argument("--ref-audio", default=None)
         ap.add_argument("--out", default=str((REPO_ROOT / paths.get("outputDir", "output") / "tts-output.wav").resolve()))
         ap.add_argument("--speed", type=float, default=float(defaults.get("speed", 1.0)))
+        ap.add_argument("--skip-health-check", action="store_true")
         args = ap.parse_args()
 
         download_base = resolve_path(REPO_ROOT, paths["downloadBase"])
-        api_url = api["baseUrl"].rstrip("/") + api.get("ttsPath", "/tts")
+        api_base = api["baseUrl"].rstrip("/")
+        api_url = api_base + api.get("ttsPath", "/tts")
+
+        if not args.skip_health_check and not check_api_health(api_base):
+            raise RuntimeError("GPT-SoVITS API is not reachable. Please start it first with scripts/start-gptsovits-api.ps1")
+
         ref = pick_ref(download_base, args.model, args.ref_audio)
         out = Path(args.out)
         synthesize(api_url, args.text, args.text_lang, args.prompt_text, args.prompt_lang, ref, out, args.speed)

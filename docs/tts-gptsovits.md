@@ -18,35 +18,6 @@ copy .\config.example.json .\config.local.json
 
 ---
 
-## 当前需要关注的配置项
-
-```json
-{
-  "api": {
-    "baseUrl": "http://127.0.0.1:9880",
-    "host": "127.0.0.1",
-    "port": 9880,
-    "ttsPath": "/tts"
-  },
-  "paths": {
-    "gptSovitsRoot": "C:\\your-path\\GPT-SoVITS",
-    "downloadBase": "C:\\your-path",
-    "runtimePython": "runtime\\python.exe",
-    "apiScript": "api_v2.py",
-    "ttsConfig": "GPT_SoVITS/configs/tts_infer.yaml",
-    "outputDir": "output"
-  },
-  "defaults": {
-    "model": "mzk(v2pp)",
-    "textLang": "ja",
-    "promptText": "こんにちは。これはテストです。",
-    "promptLang": "ja"
-  }
-}
-```
-
----
-
 ## 前台启动 API
 
 ```powershell
@@ -63,7 +34,21 @@ powershell -ExecutionPolicy Bypass -File .\scripts\stop-gptsovits-api.ps1
 
 ---
 
-## 快速调用 TTS
+## 本地最简入口：speak.ps1
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\speak.ps1 こんにちは 今日は テストです
+```
+
+输出文件：
+
+- `output\speak-latest.wav`
+
+这个脚本适合本地日常用，不用每次手写完整参数。
+
+---
+
+## 完整调用方式
 
 ```powershell
 python .\scripts\tts-gptsovits.py --text "こんにちは。テスト音声です。"
@@ -83,8 +68,20 @@ python .\scripts\tts-gptsovits.py `
 
 ---
 
+## 现在补上的能力
+
+- 基础配置化
+- API 健康检查
+- 本地一键 `speak.ps1`
+
+如果 API 没启动，`tts-gptsovits.py` 会直接提示你先运行：
+
+- `scripts/start-gptsovits-api.ps1`
+
+---
+
 ## 备注
 
 - 当前脚本默认直接打本地 GPT-SoVITS API，不走 OpenClaw 内置 tts。
-- 现在已经做了基础配置化，但仍然主要面向 Windows 本地环境。
-- 如果你准备公开给别人用，下一步应该继续补健康检查、日志和更稳的进程管理。
+- 现在已经比较适合本机自己日常使用。
+- 如果之后要进一步公开化，还应该继续补更稳的进程管理和更通用的 Python 选择逻辑。
