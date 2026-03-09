@@ -4,10 +4,6 @@ param(
 )
 
 $repoRoot = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
-$configLocal = Join-Path $repoRoot 'config.local.json'
-$configExample = Join-Path $repoRoot 'config.example.json'
-$configPath = if (Test-Path $configLocal) { $configLocal } else { $configExample }
-
 $pyCandidates = @(
   'C:\baidunetdiskdownload\GPT-SoVITS-v2pro-20250604-nvidia50\runtime\python.exe',
   'python'
@@ -23,4 +19,11 @@ if ($text) {
 }
 
 & $py @args
-exit $LASTEXITCODE
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+Add-Type -AssemblyName presentationCore
+$player = New-Object System.Windows.Media.MediaPlayer
+$player.Open([uri]$out)
+$player.Volume = 1.0
+$player.Play()
+Start-Sleep -Seconds 5
